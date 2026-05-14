@@ -1,0 +1,10 @@
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
+<input sentence 1>###<input sentence 2>###<predicted label 0 or 1>
