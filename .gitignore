@@ -1,0 +1,30 @@
+# Training / inference artifacts (regenerate locally; do not push large weights)
+wandb/
+saved_models/
+prediction_tmp/
+qualitative_tmp_pred/
+test_predictions/
+test_accuracy_summary.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Local secrets (never commit API keys)
+.env
+.env.*

@@ -1,15 +1,5 @@
-"""Fine-tune bert-base-uncased on the MRPC paraphrase detection task (GLUE).
-
-Implements the requirements of Advanced NLP Exercise 1 (Section 2):
-- Train / eval / predict on the MRPC splits.
-- Use AutoModelForSequenceClassification with the default model configuration.
-- Truncate inputs to the model's maximum length and use dynamic padding.
-- Log every training step to Weights & Biases.
-- Append the validation accuracy of each configuration to res.txt.
-- Generate predictions.txt for the test set in the required format.
-"""
-
 import argparse
+import inspect
 import os
 from typing import Optional
 
@@ -22,18 +12,28 @@ from transformers import (
     DataCollatorWithPadding,
     Trainer,
     TrainingArguments,
-    set_seed,
 )
 
 MODEL_NAME = "bert-base-uncased"
 DATASET_NAME = "nyu-mll/glue"
 DATASET_CONFIG = "mrpc"
 NUM_LABELS = 2
-SEED = 42
 
 RES_FILE = "res.txt"
 PREDICTIONS_FILE = "predictions.txt"
 SAVED_MODELS_DIR = "saved_models"
+
+
+def _trainer_tokenizer_kw(tokenizer):
+    if "processing_class" in inspect.signature(Trainer.__init__).parameters:
+        return {"processing_class": tokenizer}
+    return {"tokenizer": tokenizer}
+
+
+def _training_args_overwrite_kw():
+    if "overwrite_output_dir" in inspect.signature(TrainingArguments.__init__).parameters:
+        return {"overwrite_output_dir": True}
+    return {}
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,11 +62,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_tokenize_fn(tokenizer):
-    # MRPC samples are pairs of sentences. We pass them as a pair so the
-    # tokenizer adds the proper [SEP] separator and segment ids.
-    # Truncation is enabled and the maximum length is the model's max length;
-    # padding is intentionally disabled here so that DataCollatorWithPadding
-    # can perform dynamic padding per batch.
     def tokenize_fn(examples):
         return tokenizer(
             examples["sentence1"],
@@ -111,12 +106,6 @@ def append_result_line(num_train_epochs: int, lr: float, batch_size: int, eval_a
 
 
 def train(args: argparse.Namespace, tokenizer, tokenized_datasets, data_collator) -> str:
-    # The Trainer reports to wandb automatically when the package is installed
-    # and report_to="wandb" is set; setting WANDB_PROJECT here makes sure all
-    # runs land in the same project so the train/loss curves can be exported
-    # together for the required train_loss.png plot.
-    os.environ.setdefault("WANDB_PROJECT", "anlp-ex1-mrpc")
-
     run_name = run_name_for(args)
     output_dir = os.path.join(SAVED_MODELS_DIR, run_name)
 
@@ -126,7 +115,7 @@ def train(args: argparse.Namespace, tokenizer, tokenized_datasets, data_collator
 
     training_args = TrainingArguments(
         output_dir=output_dir,
-        overwrite_output_dir=True,
+        **_training_args_overwrite_kw(),
         num_train_epochs=args.num_train_epochs,
         learning_rate=args.lr,
         per_device_train_batch_size=args.batch_size,
@@ -137,7 +126,6 @@ def train(args: argparse.Namespace, tokenizer, tokenized_datasets, data_collator
         save_strategy="no",
         report_to=["wandb"],
         run_name=run_name,
-        seed=SEED,
         load_best_model_at_end=False,
     )
 
@@ -149,7 +137,7 @@ def train(args: argparse.Namespace, tokenizer, tokenized_datasets, data_collator
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
+        **_trainer_tokenizer_kw(tokenizer),
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
@@ -164,15 +152,6 @@ def train(args: argparse.Namespace, tokenizer, tokenized_datasets, data_collator
     tokenizer.save_pretrained(output_dir)
 
     append_result_line(args.num_train_epochs, args.lr, args.batch_size, eval_acc)
-
-    try:
-        import wandb
-
-        if wandb.run is not None:
-            wandb.run.summary["eval_accuracy"] = eval_acc
-            wandb.finish()
-    except ImportError:
-        pass
 
     return output_dir
 
@@ -193,8 +172,6 @@ def predict(
     model = AutoModelForSequenceClassification.from_pretrained(model_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    # The instructions explicitly require switching to eval mode so layers
-    # like dropout behave correctly during inference.
     model.eval()
 
     raw_test = select_first_n(raw_datasets["test"], args.max_predict_samples)
@@ -211,7 +188,7 @@ def predict(
     predictor = Trainer(
         model=model,
         args=pred_args,
-        tokenizer=tokenizer,
+        **_trainer_tokenizer_kw(tokenizer),
         data_collator=data_collator,
     )
 
@@ -231,8 +208,6 @@ def main() -> None:
     args = parse_args()
     if not args.do_train and not args.do_predict:
         raise ValueError("At least one of --do_train or --do_predict must be specified.")
-
-    set_seed(SEED)
 
     raw_datasets = load_dataset(DATASET_NAME, DATASET_CONFIG)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
